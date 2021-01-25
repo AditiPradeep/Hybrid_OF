@@ -112,7 +112,7 @@ void generate_template(vector<double> &template_vec_32768, double dt){
     } 
     else {
       template_vec_32768.push_back(myPhononPulse->Eval(i*1.6+dt));
-      hist->Fill(i+16384, myPhononPulse->Eval(i*1.6+dt));
+      hist->SetBinContent(i+16384, myPhononPulse->Eval(i*1.6+dt));
     }
   }
 
