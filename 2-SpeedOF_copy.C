@@ -75,6 +75,10 @@ void RealToComplexFFT(const vector<double>& pulsevector, vector<TComplex>& outCo
 //---------------------------------------------------------------------------------------------------------------------GENERATE TEMPLATE------------------------------------------------------------------
 void generate_template(vector<double> &template_vec_32768, double dt){
   //now make the template
+
+  TFile * file1 = new TFile("template.root", "RECREATE");
+  TH1D * hist = new TH1D("hybridTemplate", "hybridTemplate", 32768, 0, 32768);
+
   double time_offset_us = 0.0;
   double A_f = 1;
   double T_f = 100;
@@ -94,15 +98,28 @@ void generate_template(vector<double> &template_vec_32768, double dt){
   myPhononPulse->SetParameter(6,R_s);
   myPhononPulse->SetParameter(7,F_s);
 
+  myPhononPulse->Write();
+
   for(int i = 0; i < 16384; i++){
     template_vec_32768.push_back(0);
+    hist->SetBinContent(i, 0.);
   }
 
   for(int i = 0; i < 16384; i++){
-    if (i*1.6+dt  < T_f) template_vec_32768.push_back(0);
-    else template_vec_32768.push_back(myPhononPulse->Eval(i*1.6+dt));
+    if (i*1.6+dt  < T_f) {
+      template_vec_32768.push_back(0);
+      hist->SetBinContent(i+16384, 0.);
+    } 
+    else {
+      template_vec_32768.push_back(myPhononPulse->Eval(i*1.6+dt));
+      hist->Fill(i+16384, myPhononPulse->Eval(i*1.6+dt));
+    }
   }
+
+  hist->Write();
   delete myPhononPulse;
+  file1->Close();
+
 }
 //-------------------------------------------------------------------------------------------------------------------SHIFT_TEMPLATE (SHIFT A TEMPLATE)---------------------------------------------------
 void shift_template(vector<double> &template_vec_32768, vector<double> &shifted_template, double delay){
