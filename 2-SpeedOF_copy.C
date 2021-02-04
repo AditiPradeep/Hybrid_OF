@@ -448,7 +448,103 @@ double DoOptimalFilter(double *signal, double *templ,const vector<double>& noise
    return 0;
 }  
 
+//------------------------------------------------------------------------------------(Perform OF but do the scanning over delays manually)---------------------------------------------------------------
+double DoOptimalFilter_withManualDelayScan(double *signal, double *templ, int window_extension, const vector<double>& noise, int length, double df, int fwindow1, int fwindow2, double dt, double *result, double f){
+  //vector <vector<TComplex>> pProd;
+  vector<double> signalVector;
+  vector <vector<double>> templateVector;
+  vector<TComplex> signalFFT;
+  vector <vector<TComplex>> templateFFT;
+  //double sqrtdT=dt;
+  //double normalization=0;
+  //double amp=0;
+  int rows= 2*window_extension+1;
+  //---------------------FFT Calculations----------------------------------- 
+  
+  ArrayToVector(signal,signalVector, length);
+  RealToComplexFFT(signalVector,signalFFT);
+  
+  vector <double> tempvec;
+  vector <TComplex> tempFFT;
+  for (int ii=0; ii<rows; ii++){
+    for (int i=0; i<length; i++){
+      tempvec.push_back(templ[i+ii]);
+    }
+    templateVector.push_back(tempvec);
+    RealToComplexFFT(tempvec,tempFFT);
+    templateFFT.push_back(tempFFT);
+    tempvec.clear();
+    tempFFT.clear();
+  }
+  
 
+  //----------------------------------OF---------------------------
+  int nBins=length;
+  //vector <double> normalization;
+  vector <TComplex> temp_Prod;
+  double temp;
+  double amp;
+  double chisq;
+  TComplex comp_zero(0.,0.);
+  vector <double> Scanned_amp;
+  for (int ii=0;ii<rows; ii++){
+    temp=0;
+    amp=0;
+    for(int binItr=0; binItr < nBins; binItr++) {
+    //signalFFT[binItr] *= sqrt(1.6*1e-6);   //This line was present in the cdmsbats code, but the number made no sense to Emanuele or me, so we avoided it
+      temp_Prod.push_back(signalFFT[binItr]*(TComplex::Conjugate(templateFFT[ii][binItr]))/(noise[binItr]*noise[binItr]));
+ 
+      if(binItr != 0){
+	amp += temp_Prod[binItr].Re();
+	temp += pow(TComplex::Abs(templateFFT[ii][binItr]),2)/pow(TComplex::Abs(noise[binItr]),2);
+      }
+    }
+    //normalization.push_back(temp/sqrt(noise.size()));
+    temp_Prod[0] = comp_zero; 
+    //pProd.push_back(temp_Prod);
+    Scanned_amp.push_back(amp/temp);
+    temp_Prod.clear();
+   }
+  vector <double> Scanned_chisq;
+  for (int ii=0; ii<rows; ii++){
+    chisq=0;
+    for (int binItr=1; binItr<nBins; binItr++){
+      TComplex fit_fft( Scanned_amp[ii]*templateFFT[ii][binItr] );
+  
+      double chisqBin =  pow(TComplex::Abs(signalFFT[binItr] - fit_fft), 2)/pow(TComplex::Abs(noise[binItr]),2);
+      chisq += chisqBin;
+    }
+    Scanned_chisq.push_back(chisq);
+  }
+    
+  
+   int delay=0;
+   double final_amplitude=0.;
+   int template_number=0;
+  
+     //ignoring DC component
+   double minChisq=numeric_limits<double>::infinity();
+   for (int i=0; i<rows; i++){
+     if(Scanned_chisq[i]<minChisq){
+       minChisq=Scanned_chisq[i];
+       chisq=minChisq;
+       final_amplitude=Scanned_amp[i];
+       delay=window_extension-i;
+     }
+   }
+   signalVector.clear();
+   templateVector.clear();
+   signalFFT.clear();
+   templateFFT.clear();
+   //pProd.clear();
+   //p_prod_ifftRe.clear();
+   result[0]=final_amplitude;
+   //cout<<finalAmp<<endl;
+   result[1]=delay*dt;
+   result[2]=chisq/(f*f);
+   //result[2]=chisq/(f*f*(length-2));
+   return 0;
+}
 //--------------------------------------------------------------------------------------------------------------- MAIN BEGINS-----------------------------------------------------------------------------
 int main(){
   
@@ -475,6 +571,7 @@ int main(){
 
 
   double signal_amp = 3e-3;
+  int extend_OnPeakWindow_by=50;
 
    //run a single time or multiple
   for (int k=0; k<1; k++){
@@ -715,7 +812,10 @@ int main(){
  
       for (int i=16384; i<17408; i++){
 	FastSignal[i-16384]=signal32768[i];
-	template_timeFast[i-16384]=shifted_template32768[i];
+      }
+      
+      for (int bins=16384-extend_OnPeakWindow_by; bins<17408+extend_OnPeakWindow_by; bins++){
+	template_timeFast[bins-16384+extend_OnPeakWindow_by]=shifted_template32768[bins];
       }
       
           //---------------------------- DO the OF!-------------------------------
@@ -723,10 +823,12 @@ int main(){
       double temp1[3]={0.0};
       double temp2[3]={0.0};
       double temp3[3]={0.0};
-          
-      // DoOptimalFilter(signal2048, template_time2048, noiseFFT2048, 2048, 19.07348633, 994, 1054,25.6, temp1);
-      DoOptimalFilter(FastSignal, template_timeFast, noiseFFT1024, 1024, 610.3515625, 0, 1024, 1.6, temp2,625);
+      
       DoOptimalFilter(signal32768, shifted_template32768, noisePSDtwosided, 32768, 19.07348633, 16354, 16484, 1.6, temp3,625);
+      // DoOptimalFilter(signal2048, template_time2048, noiseFFT2048, 2048, 19.07348633, 994, 1054,25.6, temp1);
+      //DoOptimalFilter(FastSignal, template_timeFast, noiseFFT1024, 1024, 610.3515625, 0, 1024, 1.6, temp2,625);
+      DoOptimalFilter_withManualDelayScan(FastSignal, template_timeFast, extend_OnPeakWindow_by, noiseFFT1024, 1024, 610.3515625,0, 1024, 1.6, temp2,625);
+
       vector <double> true_template;
       vector <double> old_template;
       double true_temparr[32768];
