@@ -73,14 +73,14 @@ void RealToComplexFFT(const vector<double>& pulsevector, vector<TComplex>& outCo
 }
 
 //---------------------------------------------------------------------------------------------------------------------GENERATE TEMPLATE------------------------------------------------------------------
-void generate_template(vector<double> &template_vec_32768, double dt){
+void generate_template(vector<double> &template_vec_32768, double dt, double R, double F, double T, double W1, double W2){
   //now make the template
   double time_offset_us = 0.0;
-  double A_f = 1;
-  double T_f = 100;
-  double R_f = 40;
-  double F_f = 750;
-  double A_s = 0;
+  double A_f = W1;
+  double T_f = T;
+  double R_f = R;
+  double F_f = F;
+  double A_s = W2;
   double T_s = 100;
   double R_s = 100.;
   double F_s = 3;
@@ -373,7 +373,7 @@ double DoOptimalFilter(double *signal, double *templ,const vector<double>& noise
   //---------------------FFT Calculations----------------------------------- 
   RealToComplexFFT(signalVector,signalFFT);
   RealToComplexFFT(templateVector,templateFFT);
-
+  
   //----------------------------------OF---------------------------
   int nBins=length;
   double temp=0;
@@ -403,7 +403,7 @@ double DoOptimalFilter(double *signal, double *templ,const vector<double>& noise
    int idelay = 0;
 
    ComplexToRealIFFT(pProd, p_prod_ifftRe);  //C2R - no imaginary component!
-
+   
    //pick out maximum amplitude and corresponding delay     
    for(int binItr=0; binItr < nBins; binItr++) {
      double amp0 =  p_prod_ifftRe[binItr];
@@ -444,7 +444,8 @@ double DoOptimalFilter(double *signal, double *templ,const vector<double>& noise
    result[0]=finalAmp;
    //cout<<finalAmp<<endl;
    result[1]=delay*dt;
-   result[2]=chisq/(f*f*(length-2));
+   result[2]=chisq/(f*f);
+   //result[2]=chisq/(f*f*(length-2));
    return 0;
 }  
 
@@ -477,7 +478,6 @@ double DoOptimalFilter_withManualDelayScan(double *signal, double *templ, int wi
     tempFFT.clear();
   }
   
-
   //----------------------------------OF---------------------------
   int nBins=length;
   //vector <double> normalization;
@@ -516,13 +516,12 @@ double DoOptimalFilter_withManualDelayScan(double *signal, double *templ, int wi
     }
     Scanned_chisq.push_back(chisq);
   }
-    
-  
+   
+   //compute delay
    int delay=0;
    double final_amplitude=0.;
    int template_number=0;
-  
-     //ignoring DC component
+   
    double minChisq=numeric_limits<double>::infinity();
    for (int i=0; i<rows; i++){
      if(Scanned_chisq[i]<minChisq){
@@ -532,8 +531,9 @@ double DoOptimalFilter_withManualDelayScan(double *signal, double *templ, int wi
        delay=window_extension-i;
      }
    }
+    
    signalVector.clear();
-   templateVector.clear();
+   //templateVector.clear();
    signalFFT.clear();
    templateFFT.clear();
    //pProd.clear();
@@ -544,7 +544,7 @@ double DoOptimalFilter_withManualDelayScan(double *signal, double *templ, int wi
    result[2]=chisq/(f*f);
    //result[2]=chisq/(f*f*(length-2));
    return 0;
-}
+}  
 //--------------------------------------------------------------------------------------------------------------- MAIN BEGINS-----------------------------------------------------------------------------
 int main(){
   
@@ -566,23 +566,18 @@ int main(){
   //define the template in time domain
   //32768 is the number of time bins for the whole trace
   //3008 is the number of time bins for the hybrid trace 
-  vector<double> template_time_32768;
-  double template_time32768[32768];
+ 
 
 
   double signal_amp = 3e-3;
   int extend_OnPeakWindow_by=50;
-
-   //run a single time or multiple
+  
+  //run a single time or multiple
   for (int k=0; k<1; k++){
 
     if (k%100==0) cout<<k<<endl;
     //generate the template -- look at the fuction
-    generate_template(template_time_32768, 0);
-    double max = *max_element( template_time_32768.begin(), template_time_32768.end());
-    for (int i=0; i<32768; i++){
-      template_time32768[i]=template_time_32768.at(i)/max;
-    }
+    
     //compressTime is simulating the hybrid readout
 
     //downsample_template(shifted_template32768, template_time2048);
@@ -694,7 +689,7 @@ int main(){
 	noiseFFT1024.push_back(sqrt(sum)/(double)p);
       }
       noise1024PSD.clear();
-      
+         
       //open output files
       ofstream file1;
       ofstream file2;
@@ -702,21 +697,28 @@ int main(){
       ofstream file4;
       ofstream file5;
       ofstream file6;
+      ofstream file7;
+      ofstream file8;
+      ofstream file9;
 
       file1.open ("A1_delay.txt");
       file2.open ("A2_delay.txt");
       file3.open ("t1_delay.txt");
-      file4.open ("A32768_delay.txt");
-      file5.open ("t32768_delay.txt");
+      //file4.open ("A32768_delay.txt");
+      //file5.open ("t32768_delay.txt");
       file6.open ("t2_delay.txt");
+      file7.open ("chi1_delay.txt");
+      file8.open ("chi2_delay.txt");
+      //file9.open ("chi32768_delay.txt");
       
  //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-     for (int trial=0; trial<1000; trial++){
-       vector<double> shifted_template_32768;
+     for (int trial=0; trial<10; trial++){
+       vector <double> shifted_template_32768;
        double shifted_template32768[32768]={0.0};
        double template_time3008[3008]={0.0};
        double template_time2048[2048]={0.0};
-
+       vector<double> template_time_32768;
+       double template_time32768[32768]={0.0};
        TRandom3 gRandom2(0);
        //double t = gRandom2.Gaus(0,12.8);
        double t = gRandom2.Uniform(-25.6,25.6);
@@ -724,14 +726,19 @@ int main(){
        //if(t>0) t0=25.6;
        //else t0=-25.6;
        //double t0 = t;
-       //int t0=100;
-       //cout<<"delay="<<t0<<endl;
-
-       //shift_template(template_time_32768,shifted_template_32768,t0);
-       generate_template(shifted_template_32768, t0);
-       double max_shifted = *max_element( shifted_template_32768.begin(), shifted_template_32768.end());
+       //double t0=20.;
+       cout<<"delay="<<t0<<endl;
+       generate_template(template_time_32768,t0,40.,750.,0.,1.,0.);
+       double max = *max_element( template_time_32768.begin(), template_time_32768.end());
        for (int i=0; i<32768; i++){
-	 shifted_template32768[i]=shifted_template_32768.at(i)/max_shifted;
+	 template_time32768[i]=template_time_32768.at(i)/max;
+       }
+       template_time_32768.clear();
+       //shift_template(template_time_32768,shifted_template_32768,t0);
+       generate_template(shifted_template_32768, 0.,40.,750.,0.,1.,0.);
+       double max_shifted = *max_element( shifted_template_32768.begin(), shifted_template_32768.end());
+       for (int bins=0; bins<32768; bins++){ 
+	 shifted_template32768[bins]=shifted_template_32768.at(bins)/max_shifted;
        }
        shifted_template_32768.clear();
        // downsample_template(shifted_template32768, template_time2048);
@@ -749,16 +756,17 @@ int main(){
        signalnoise[i] -= prepulse_averagesig;
      }
 
-
+     //cout<<prepulse_averagesig<<endl;
      //----------------------------------------initialize variables---------------------------------------
      double signal3008[3008]={0.0};
      double signal32768[32768]={0.0};
      double signal2048[2048]={0.0};
      double FastSignal[1024]={0.0};
-     double template_timeFast[1024]={0.0};
+     double template_timeFast[2048]={0.0};
     //-----------------------------create your signal as template + noise---------------------------------
       for(int i=0;i<32768;i++){
 	signal32768[i]  = signalnoise[i];
+	//signal32768[i]=0;
 	signal32768[i] += signal_amp*template_time32768[i];
       }
       /*
@@ -767,7 +775,7 @@ int main(){
       for (int i=0; i<32768; i++){
 	time32768[i]=i;
       }
-     TCanvas* c=new TCanvas("c","Uniformly downsampled",800,600);
+     TCanvas* c=new TCanvas("c","Templates",800,600);
      TMultiGraph *mg = new TMultiGraph();
      TGraph *gr = new TGraph(32768, time32768, template_time32768);
      gr->SetMarkerStyle(4);
@@ -784,23 +792,29 @@ int main(){
      mg->Add(grr);
      mg->Draw("AP");
 
-     
-      double  time3008[3008];
-      for (int i=0; i<3008; i++){
-	time3008[i]=i;
+      
+      double  time1024[1024];
+      for (int i=0; i<1024; i++){
+	time1024[i]=i;
       }
-      TCanvas* ch=new TCanvas("ch","Hybrid",800,600);
+      double template_1024[1024]={0.0};
+      double shifted_template_1024[1024]={0.0};
+      for (int i=16384; i<17408; i++){
+	template_1024[i-16384]=template_time32768[i];
+	shifted_template_1024[i-16384]=shifted_template32768[i];
+      }
+      TCanvas* ch=new TCanvas("ch","FST",800,600);
       TMultiGraph *mgh = new TMultiGraph();
-     TGraph *grrh = new TGraph(3008, time3008, template_time3008);
+     TGraph *grrh = new TGraph(1024, time1024, template_1024);
      grrh->SetMarkerStyle(4);
      grrh->SetMarkerSize(0.35);
-     grrh->SetMarkerColor(kRed);
+     grrh->SetMarkerColor(kBlue);
      //grr->GetXaxis()->SetRangeUser(16380,18000);
      mgh->Add(grrh);
-     TGraph *grh = new TGraph(3008, time3008, template_time3008);
+     TGraph *grh = new TGraph(1024, time1024,shifted_template_1024);
      grh->SetMarkerStyle(4);
      grh->SetMarkerSize(0.35);
-     grh->SetMarkerColor(kBlue);
+     grh->SetMarkerColor(kRed);
      //     gr->GetXaxis()->SetRangeUser(16380,18000);
      mgh->Add(grh);
      mgh->Draw("AP");
@@ -813,22 +827,52 @@ int main(){
       for (int i=16384; i<17408; i++){
 	FastSignal[i-16384]=signal32768[i];
       }
-      
+      //double template_750Fast[1024+40]={0.0};
       for (int bins=16384-extend_OnPeakWindow_by; bins<17408+extend_OnPeakWindow_by; bins++){
 	template_timeFast[bins-16384+extend_OnPeakWindow_by]=shifted_template32768[bins];
+	//template_750Fast[bins-16384+extend_OnPeakWindow_by]=template_time32768[bins];
       }
-      
-          //---------------------------- DO the OF!-------------------------------
+      /*
+      //---------------------------------------------------------PLOTS-------------------------------------------------------
+      double  time1024[1024+100];
+      for (int i=0; i<1024+100; i++){
+	time1024[i]=i;
+      }/*
+      double template_1024[1024]={0.0};
+      double shifted_template_1024[1024]={0.0};
+      for (int i=16384; i<17408; i++){
+	template_1024[i-16384]=template_time32768[i];
+	shifted_template_1024[i-16384]=shifted_template32768[i];
+	}*//*
+      TCanvas* ch=new TCanvas("ch","FST",800,600);
+      TMultiGraph *mgh = new TMultiGraph();
+      TGraph *grrh = new TGraph(1024+100, time1024, template_timeFast);
+      grrh->SetMarkerStyle(4);
+      grrh->SetMarkerSize(0.35);
+      grrh->SetMarkerColor(kBlue);
+      //grr->GetXaxis()->SetRangeUser(16380,18000);
+      mgh->Add(grrh);
+      //TGraph *grh = new TGraph(1024+100, time1024,template_750Fast);
+      // grh->SetMarkerStyle(4);
+      //grh->SetMarkerSize(0.35);
+      //grh->SetMarkerColor(kRed);
+      //     gr->GetXaxis()->SetRangeUser(16380,18000);
+      //mgh->Add(grh);
+      mgh->Draw("AP");
+      TLine *l1 = new TLine(50,0,50,1);
+      l1->Draw();
+      TLine *l2= new TLine(1074,0,1074,1);
+      l2->Draw();
+      */
+      //---------------------------- DO the OF!-------------------------------
        
       double temp1[3]={0.0};
       double temp2[3]={0.0};
-      double temp3[3]={0.0};
-      
-      DoOptimalFilter(signal32768, shifted_template32768, noisePSDtwosided, 32768, 19.07348633, 16354, 16484, 1.6, temp3,625);
+      //double temp3[3]={0.0};
+      //DoOptimalFilter(signal32768, shifted_template32768, noisePSDtwosided, 32768, 19.07348633, 0, 32768, 1.6, temp3,625);
       // DoOptimalFilter(signal2048, template_time2048, noiseFFT2048, 2048, 19.07348633, 994, 1054,25.6, temp1);
-      //DoOptimalFilter(FastSignal, template_timeFast, noiseFFT1024, 1024, 610.3515625, 0, 1024, 1.6, temp2,625);
       DoOptimalFilter_withManualDelayScan(FastSignal, template_timeFast, extend_OnPeakWindow_by, noiseFFT1024, 1024, 610.3515625,0, 1024, 1.6, temp2,625);
-
+      //DoOptimalFilter(FastSignal, template_timeFast, noiseFFT1024, 1024, 610.3515625,0, 1024, 1.6, temp2,625);
       vector <double> true_template;
       vector <double> old_template;
       double true_temparr[32768];
@@ -843,19 +887,22 @@ int main(){
       //true_template.clear();
       compressTime(true_temparr, template_time3008);
       FastToSlowCompress(template_time2048,template_time3008);
-      DoOptimalFilter(signal2048, template_time2048, noiseFFT2048, 2048, 19.07348633, 994, 1054,25.6, temp1,39.0625);
+      DoOptimalFilter(signal2048, template_time2048, noiseFFT2048, 2048, 19.07348633, 0, 2048,25.6, temp1,39.0625);
       //--------------------------------------------------------------------------Finding best delay------------------------------------------
       /*
-      cout<<temp2[0]<<endl;
-      cout<<temp1[0]<<endl;
-      cout<<temp3[0]<<endl;
+      cout<<temp2[1]<<endl;
+      cout<<temp1[1]<<endl;
+      cout<<temp3[1]<<endl;
       */
       file1 << temp1[0] << endl;
       file2 << temp2[0] << endl;
       file3 << temp1[1] << endl;
-      file4 << temp3[0] << endl;
-      file5 << temp3[1] << endl;
+      //file4 << temp3[0] << endl;
+      //file5 << temp3[1] << endl;
       file6 << temp2[1] << endl;
+      file7 << temp1[2] << endl;
+      file8 << temp2[2] << endl;
+      //file9 << temp3[2] << endl;
      }
       //-----------------------------------------------------------PLOTS-------------------------------------------------
      /*       
